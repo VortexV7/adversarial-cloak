@@ -1,0 +1,30 @@
+# Adversarial Cloak — MAIN environment (Python 3.12, torch 2.15)
+# Pins are the versions verified together in .venv on 2026-11-06.
+# Install torch from the CPU index first:
+#   pip install torch --index-url https://download.pytorch.org/whl/cpu
+#   pip install -r requirements.txt
+#
+# This env runs the full pipeline. Real FaceNet / ArcFace / MediaPipe are
+# OPTIONAL here: when they are absent, embedder.py falls back to a seeded
+# CNN and detector.py falls back to Haar, both flagged in the metrics.
+# For real-model evaluation, DO NOT install the real stack into this venv
+# (facenet-pytorch 2.6.0 forces torch<2.3, numpy<2, Pillow<10.3) — use the
+# separate env in requirements-real.txt instead (see README).
+torch==2.15.0
+numpy==2.5.4
+Pillow==13.0.0
+opencv-python-headless==4.10.0.84
+scikit-image==0.26.0
+scipy==1.18.1
+fastapi==0.162.0
+uvicorn==0.54.0
+python-multipart==0.0.33
+pydantic==2.14.3
+matplotlib==3.11.2
+httpx==0.28.1
+websockets==17.4
+pytest==9.2.0
+reportlab==4.2.5
+# Optional extras (not required; code degrades gracefully without them):
+#   scikit-learn  -- LFW download for eval/download_lfw.py
+#   lpips         -- real LPIPS; otherwise metrics use a flagged MSE proxy

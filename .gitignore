@@ -1,0 +1,14 @@
+.venv/
+.venv-real/
+backend/models/
+__pycache__/
+*.pyc
+.env
+backend/enrolled.json
+demo_out/
+eval/lfw_home/
+eval/results.csv
+eval/plots/
+frontend/node_modules/
+frontend/dist/
+.DS_Store

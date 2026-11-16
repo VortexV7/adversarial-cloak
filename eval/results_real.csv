@@ -1,0 +1,5 @@
+method,asr_facenet,asr_arcface,rank1_drop,ssim,psnr,lpips,robust_jpeg70_asr,robust_resize_asr,robust_blur_asr,robust_jpeg70_sim,robust_resize_sim,robust_blur_sim,latency_ms,dataset,baseline_jpeg70_sim,baseline_resize_sim,baseline_blur_sim
+fgsm,0.7368,1.0,0.2926,0.9245,31.38,0.0131,0.9474,1.0,0.9474,0.4128,0.3878,0.3972,1027.2,lfw,0.4855,0.4245,0.4249
+pgd,1.0,0.9474,0.6641,0.9636,34.03,0.0071,0.9474,0.8947,0.8947,0.4269,0.3929,0.3953,3441.8,lfw,0.4855,0.4245,0.4249
+ours,1.0,0.9474,0.6314,0.9764,35.55,0.0051,0.8947,0.8947,0.8947,0.4343,0.3933,0.3962,8155.5,lfw,0.4855,0.4245,0.4249
+ours_no_eot,0.8421,0.8947,0.3456,0.9795,36.2,0.0044,0.8947,0.8947,0.8947,0.4435,0.4019,0.4033,6201.8,lfw,0.4855,0.4245,0.4249
