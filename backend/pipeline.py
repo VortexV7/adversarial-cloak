@@ -11,6 +11,7 @@ edge around the face.
 """
 from __future__ import annotations
 
+import os
 import time
 from dataclasses import dataclass, field
 
@@ -41,6 +42,17 @@ class CloakPipeline:
                  detector: FaceDetector | None = None) -> None:
         self.cfg = cfg or CloakConfig()
         self.device = self.cfg.resolved_device()
+        if self.device == "cuda":
+            # Let cuDNN pick the fastest convolution for the fixed 160px
+            # crop size instead of re-benchmarking heuristics per shape.
+            torch.backends.cudnn.benchmark = True
+        if self.cfg.device == "both" and self.device == "cuda":
+            # "Both" mode: the GPU is busy with the models, so give the
+            # CPU-side work (detection, JPEG, metrics) every CPU core.
+            try:
+                torch.set_num_threads(max(1, os.cpu_count() or 1))
+            except Exception:
+                pass
         self.surrogate = surrogate or get_embedder(self.cfg.surrogate, self.device)
         self.evaluator = evaluator or get_embedder(self.cfg.evaluator, self.device)
         self.detector = detector or FaceDetector()
@@ -133,6 +145,62 @@ class CloakPipeline:
     # -- offline paths ---------------------------------------------------
     def process_image(self, image_bgr: np.ndarray) -> FrameResult:
         return self.process_frame(image_bgr)
+
+    def cloak_image(self, image_bgr: np.ndarray) -> FrameResult:
+        """Cloak every face in a still photo (the Image Cloak feature).
+
+        Unlike process_frame this never reuses a cached perturbation:
+        a photo has no "previous frame", so each face gets a fresh
+        cloak_attack with the current config. Returns the cloaked image
+        plus per-image metrics (similarities in the evaluator's space,
+        SSIM/PSNR over the cloaked faces). No faces -> metrics carry
+        faces=0 and the image is returned unchanged.
+        """
+        start = time.perf_counter()
+        frame = self._resize(image_bgr)
+        protected = frame.copy()
+        boxes = self.detector.detect(frame)
+        boxes = self.tracker.update(boxes)
+        sims_before, sims_after = [], []
+        ssim_vals, psnr_vals, lpips_vals = [], [], []
+
+        if self.cfg.enabled:
+            for box in boxes:
+                crop = self.detector.crop(frame, box)
+                if crop.size == 0 or min(crop.shape[:2]) < 32:
+                    continue
+                orig_t = self._crop_to_tensor(crop)
+                ref = self._reference_embedding(orig_t)
+                adv = cloak_attack(self.surrogate, orig_t, self.cfg,
+                                   seed=self.frame_idx)
+                adv_t = adv.detach().clamp(0, 1)
+                adv_crop = self._tensor_to_crop(adv_t, crop.shape)
+                import torch.nn.functional as _F
+
+                with torch.no_grad():
+                    orig_eval = _F.interpolate(
+                        orig_t, size=(self.evaluator.image_size,
+                                     self.evaluator.image_size),
+                        mode="bilinear", align_corners=False)
+                    sim_before = cosine_similarity(
+                        ref, self.evaluator.embed(orig_eval).cpu().numpy()[0])
+                    sim_after = cosine_similarity(
+                        ref, self.evaluator.embed(
+                            self.evaluator.preprocess(
+                                cv2.cvtColor(adv_crop, cv2.COLOR_BGR2RGB))).cpu().numpy()[0])
+                sims_before.append(sim_before)
+                sims_after.append(sim_after)
+                ssim_vals.append(ssim(crop, adv_crop))
+                psnr_vals.append(psnr(crop, adv_crop))
+                lpips_vals.append(lpips_score(crop, adv_crop)[0])
+                protected = self._composite(protected, adv_crop, box)
+
+        latency_ms = (time.perf_counter() - start) * 1000
+        metrics = self._summarise(sims_before, sims_after, ssim_vals, psnr_vals,
+                                  lpips_vals, latency_ms, len(boxes))
+        self._last_metrics = metrics
+        return FrameResult(protected_bgr=protected, boxes=boxes,
+                           metrics=metrics, frame_idx=self.frame_idx)
 
     def process_video(self, source: str | int, max_frames: int = 0,
                       on_frame=None):
@@ -249,6 +317,8 @@ class CloakPipeline:
             "evaluator": self.evaluator.name,
             "surrogate_fallback": self.surrogate.is_fallback,
             "evaluator_fallback": self.evaluator.is_fallback,
+            "device": self.device,
+            "device_mode": self.cfg.device,
         }
 
 

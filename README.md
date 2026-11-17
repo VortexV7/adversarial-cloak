@@ -24,7 +24,7 @@ protection switch. Or run the pieces separately:
 ```bash
 make backend      # uvicorn backend.api:app --port 8000
 make frontend     # vite dev server on :5173
-make test         # 18 backend unit tests
+make test         # 25 backend unit tests
 make eval         # evaluation -> eval/results.csv + eval/plots/*.png
 make demo         # cloak one image -> demo_out/side_by_side.png
 docker compose up --build   # containerised run (not verified on the build VM: no Docker there)
@@ -59,6 +59,47 @@ Tasks API (`FaceDetector` + the bundled `blaze_face_short_range.tflite`).
 insightface models are non-commercial research licence only — fine for
 a final-year project.
 
+### Device modes (GPU / CPU / Both) — v1.1.0
+
+Settings → **Performance — device** picks where the heavy AI work runs.
+The backend config field is `device` (`auto | cpu | cuda | both`, default
+`auto`); `GET /device` reports GPU availability and the effective device,
+and changing the mode rebuilds the pipeline on the new device.
+
+- **Auto** — GPU if one is available, otherwise CPU.
+- **CPU only** — everything on the CPU; works everywhere, slowest.
+- **GPU only** — FaceNet / ArcFace run on the GPU (cuDNN benchmarking on).
+  On a machine without CUDA it falls back to CPU and the UI says so.
+- **Both** — GPU runs the AI models, CPU handles detection (MediaPipe is
+  CPU-only by design) and video work, with all CPU cores given to the
+  CPU-side work: the fastest option on a machine with a GPU.
+
+The header shows a live GPU/CPU chip. ~3 FPS on CPU with the real models;
+15 FPS is a laptop-GPU target.
+
+### Image Cloak — v1.1.0
+
+The **Image Cloak** page cloaks a still photo instead of a live feed:
+upload a picture (drag-and-drop or file picker), press **Cloak this
+photo**, and every face in it gets the same PGD+EOT+mask attack, baked
+into the image — the photo looks unchanged to people, but face-recognition
+AI can't match the people in it. The page shows the original and cloaked
+photos side by side with similarity before → after, match confidence,
+SSIM and a **Download cloaked photo** button. Backend: `POST /cloak-image`
+(multipart photo → base64 cloaked JPEG + metrics; 422 when no face is
+found). A photo has no "previous frame", so each face is cloaked fresh
+with no temporal cache reuse (`CloakPipeline.cloak_image`).
+
+### UI notes — v1.1.0
+
+- Every setting that needs explaining has a small **ⓘ button** next to it
+  (epsilon, PGD steps, update interval, EOT, mask, surrogate, device,
+  EMA, match threshold) — one short plain-English line each, nothing more.
+- The control panel is grouped into Strength / Speed / Robustness, the
+  sidebar carries a one-line plain-English summary of what the tool does,
+  and the app background is a quiet teal-tinted wash (light) / deep navy
+  gradient (dark) with glass cards.
+
 ## Repository layout
 
 ```
@@ -78,6 +119,7 @@ eval/
 docs/
   THREAT_MODEL.md   what it protects against — and what it does not
   DEMO_SCRIPT.md    3-minute demo + screenshot list for the report
+  SIMPLE_EXPLAINER.md  plain-language explainer + real LFW results + likely viva Q&A
 scripts/demo_single_image.py
 ```
 
@@ -161,7 +203,9 @@ above is the corrected run.
 | Endpoint | Description |
 |----------|-------------|
 | `GET /health` | liveness, device, model/fallback status |
-| `GET/POST /config` | epsilon, steps, update interval, model, EOT/mask toggles, protection on/off |
+| `GET /device` | device modes + GPU availability (Settings picker) |
+| `GET/POST /config` | epsilon, steps, update interval, model, EOT/mask toggles, protection on/off, device mode |
+| `POST /cloak-image` (multipart) | upload a photo → cloaked photo (base64) + metrics; 422 when no face is found |
 | `POST /enroll` (multipart) | store a reference embedding (512-d only, never the photo) |
 | `GET/DELETE /enroll` | enrolled identity / clear it |
 | `POST /benchmark` | run `eval/run_eval.py`, returns the results table |

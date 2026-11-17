@@ -1,5 +1,44 @@
+import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import type { ReactNode } from "react";
+
+/** Small "i" button next to a setting. Tap it for one short plain-English
+ *  line explaining what the setting does. Used only on the options where
+ *  the name alone doesn't say enough — not on every label. */
+export function InfoButton({ label, text }: { label: string; text: string }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open ]);
+
+  return (
+    <span ref={ref} className="relative inline-flex align-middle">
+      <button type="button" aria-label={`What does ${label} do?`} aria-expanded={open}
+        onClick={() => setOpen(!open)}
+        className="ml-1 inline-flex h-4 w-4 items-center justify-center rounded-full border border-slate-400 text-[10px] font-bold leading-none text-slate-500 hover:border-teal-500 hover:text-teal-600 dark:border-slate-500 dark:text-slate-400 dark:hover:border-teal-400 dark:hover:text-teal-300">
+        i
+      </button>
+      {open && (
+        <span role="status"
+          className="absolute left-0 top-5 z-50 w-56 rounded-card border border-slate-200 bg-white p-2.5 text-xs font-normal normal-case leading-relaxed text-slate-600 shadow-lg dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+          {text}
+        </span>
+      )}
+    </span>
+  );
+}
 
 export function Card({ children, className = "", label }: { children: ReactNode; className?: string; label?: string }) {
   return (
@@ -25,14 +64,15 @@ export function Toggle({ checked, onChange, label }: { checked: boolean; onChang
   );
 }
 
-export function Slider({ label, value, min, max, step, onChange, format }: {
+export function Slider({ label, value, min, max, step, onChange, format, info }: {
   label: string; value: number; min: number; max: number; step: number;
   onChange: (v: number) => void; format?: (v: number) => string;
+  info?: string;
 }) {
   return (
     <label className="block">
       <span className="flex justify-between text-sm">
-        <span className="font-medium text-slate-700 dark:text-slate-200">{label}</span>
+        <span className="font-medium text-slate-700 dark:text-slate-200">{label}{info && <InfoButton label={label} text={info} />}</span>
         <span className="tabular-nums text-teal-600 dark:text-teal-400 font-semibold">{format ? format(value) : value}</span>
       </span>
       <input type="range" aria-label={label} min={min} max={max} step={step} value={value}

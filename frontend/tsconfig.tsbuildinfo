@@ -1,0 +1,1 @@
+{"root":["./src/App.tsx","./src/lib.ts","./src/main.tsx","./src/vite-env.d.ts","./src/components/ui.tsx","./src/hooks/useCloakSocket.ts","./src/pages/Benchmarks.tsx","./src/pages/Enrollment.tsx","./src/pages/ImageCloak.tsx","./src/pages/LiveMonitor.tsx","./src/pages/Reports.tsx","./src/pages/Settings.tsx"],"version":"5.9.3"}

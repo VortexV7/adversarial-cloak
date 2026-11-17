@@ -7,14 +7,43 @@
 
 body { font-family: "Inter", system-ui, sans-serif; }
 
+/* Quiet app background: a soft teal-tinted wash in light mode, a deep
+   navy gradient in dark mode, so the glass cards lift off the page. */
+body {
+  background:
+    radial-gradient(1200px 500px at 80% -10%, rgba(20, 184, 166, 0.10), transparent 60%),
+    #f1f5f9;
+}
+.dark body {
+  background:
+    radial-gradient(1200px 500px at 80% -10%, rgba(20, 184, 166, 0.12), transparent 60%),
+    radial-gradient(900px 500px at 0% 0%, rgba(30, 58, 95, 0.35), transparent 55%),
+    #0a1120;
+}
+
 .glass {
-  background: rgba(255, 255, 255, 0.65);
+  background: rgba(255, 255, 255, 0.78);
   backdrop-filter: blur(14px);
   border: 1px solid rgba(15, 23, 42, 0.08);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
 }
 .dark .glass {
-  background: rgba(18, 32, 58, 0.55);
+  background: rgba(18, 32, 58, 0.62);
   border: 1px solid rgba(148, 163, 184, 0.14);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+
+/* Visible keyboard focus everywhere (buttons, sliders, nav). */
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+a:focus-visible {
+  outline: 2px solid #14b8a6;
+  outline-offset: 2px;
 }
 
 input[type="range"] { accent-color: #14b8a6; }
+input[type="range"]:focus-visible { outline-offset: 4px; }
+
+/* Slightly rounder, softer selects and inputs. */
+select, input[type="text"], input[type="url"] { border-radius: 0.75rem; }

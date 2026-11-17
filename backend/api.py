@@ -12,11 +12,13 @@ Server -> client: one JSON text frame per input frame::
 REST
 ----
 GET  /health            liveness + device + model status
+GET  /device            device modes + GPU availability (Settings picker)
 GET  /config            current CloakConfig
-POST /config            partial update (epsilon, steps, update_interval, ...)
+POST /config            partial update (epsilon, steps, update_interval, device, ...)
 POST /enroll            multipart image -> store reference embedding
 GET  /enroll            enrolled identity (embedding hash only, never the vector)
 DELETE /enroll          clear enrolment
+POST /cloak-image       multipart photo -> cloaked photo (base64) + metrics
 POST /benchmark         run the eval on the bundled sample pairs
 POST /export-report     CSV (and PDF when reportlab is installed) summary
 POST /rtsp/start        start an RTSP/IP-camera source  {"url": "..."}
@@ -44,7 +46,7 @@ from .embedder import embedding_from_bytes, get_embedder
 from .metrics import cosine_similarity
 from .pipeline import CloakPipeline
 
-app = FastAPI(title="Adversarial Cloak", version="1.0.0")
+app = FastAPI(title="Adversarial Cloak", version="1.1.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"], allow_credentials=True,
@@ -96,6 +98,7 @@ class ConfigUpdate(BaseModel):
     use_mask: bool | None = None
     enabled: bool | None = None
     enroll_threshold: float | None = None
+    device: str | None = None  # auto | cpu | cuda | both
 
 
 class RtspRequest(BaseModel):
@@ -109,6 +112,8 @@ def health():
     return {
         "status": "ok",
         "device": CONFIG.resolved_device(),
+        "device_mode": CONFIG.device,
+        "using_gpu": CONFIG.resolved_device() == "cuda",
         "surrogate": CONFIG.surrogate,
         "evaluator": CONFIG.evaluator,
         "detector": pipe.detector.backend if pipe else "not-started",
@@ -117,6 +122,12 @@ def health():
         "enrolled": _enrolled_name is not None,
         "rtsp_url": _rtsp_url,
     }
+
+
+@app.get("/device")
+def device_status():
+    """Device modes for the Settings picker (see config.CloakConfig)."""
+    return CONFIG.device_status()
 
 
 @app.get("/config")
@@ -130,10 +141,15 @@ def update_config(update: ConfigUpdate):
     for key, value in changes.items():
         if key in ("surrogate", "evaluator") and value not in ("facenet", "arcface"):
             continue
+        if key == "device" and value not in ("auto", "cpu", "cuda", "both"):
+            continue
         setattr(CONFIG, key, value)
-    # A surrogate change needs a fresh pipeline (new embedder instance).
-    if "surrogate" in changes or "evaluator" in changes:
+    # A surrogate/evaluator/device change needs a fresh pipeline:
+    # new embedder instances are built on the (possibly new) device.
+    if {"surrogate", "evaluator", "device"} & set(changes):
         global _pipeline
+        if _pipeline is not None:
+            _pipeline.close()
         _pipeline = None
     return {"updated": changes, "config": CONFIG.__dict__}
 
@@ -173,6 +189,53 @@ def clear_enrollment():
     if _ENROLL_FILE.exists():
         _ENROLL_FILE.unlink()
     return {"enrolled": False}
+
+
+@app.post("/cloak-image")
+async def cloak_image(file: UploadFile = File(...)):
+    """Cloak a still photo: upload a picture, get the cloaked picture back.
+
+    Returns JSON with base64 ``original`` and ``image`` (JPEG) plus the
+    same metrics as a video frame, so the frontend can show a
+    before/after compare and offer a download. 422 when no face is
+    found in the photo. The cloak is the same PGD+EOT+mask attack as
+    the live path, applied fresh to every face in the photo.
+    """
+    data = await file.read()
+    arr = np.frombuffer(data, dtype=np.uint8)
+    image = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+    if image is None:
+        from fastapi.responses import JSONResponse
+
+        return JSONResponse(status_code=400,
+                            content={"error": "could not read that image file"})
+    pipe = get_pipeline()
+    result = pipe.cloak_image(image)
+    m = result.metrics
+    if m.get("faces", 0) == 0:
+        from fastapi.responses import JSONResponse
+
+        return JSONResponse(status_code=422,
+                            content={"error": "no face found in this photo"})
+    return {
+        "original": _jpeg_b64(image),
+        "image": _jpeg_b64(result.protected_bgr),
+        "faces": m["faces"],
+        "boxes": [{"x": b.x, "y": b.y, "w": b.w, "h": b.h,
+                   "track_id": b.track_id, "score": b.score}
+                  for b in result.boxes],
+        "similarity_before": m["similarity_before"],
+        "similarity_after": m["similarity_after"],
+        "confidence_before": m["confidence_before"],
+        "confidence_after": m["confidence_after"],
+        "attack_success": m["attack_success"],
+        "ssim": m["ssim"],
+        "psnr": m["psnr"],
+        "lpips": m["lpips"],
+        "latency_ms": m["latency_ms"],
+        "device": m.get("device"),
+        "device_mode": m.get("device_mode"),
+    }
 
 
 @app.post("/benchmark")

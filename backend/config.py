@@ -32,7 +32,17 @@ class CloakConfig:
     enabled: bool = True              # protection ON/OFF master switch
 
     # --- runtime --------------------------------------------------------
-    device: str = "auto"              # auto | cpu | cuda
+    # Device mode (Settings -> Performance):
+    #   auto  - GPU if one is available, otherwise CPU
+    #   cpu   - everything on the CPU
+    #   cuda  - the AI models (FaceNet / ArcFace) on the GPU
+    #   both  - GPU runs the AI models, CPU runs detection + video
+    #           handling in parallel: the fastest option on a machine
+    #           with a GPU. (MediaPipe detection is CPU-only by design,
+    #           so it always stays on the CPU.)
+    # A mode that asks for the GPU on a machine without one falls back
+    # to CPU and reports that in device_status() -- it never crashes.
+    device: str = "auto"              # auto | cpu | cuda | both
     jpeg_quality: int = 85            # JPEG quality for WebSocket frames
     max_frame_width: int = 960        # downscale wider frames before processing
     enroll_threshold: float = 0.60    # cosine-sim threshold for "same person"
@@ -42,15 +52,49 @@ class CloakConfig:
     def resolved_alpha(self) -> float:
         return self.alpha if self.alpha > 0 else self.epsilon / max(1, self.steps)
 
-    def resolved_device(self) -> str:
-        if self.device != "auto":
-            return self.device
+    @staticmethod
+    def cuda_available() -> bool:
         try:
             import torch
 
-            return "cuda" if torch.cuda.is_available() else "cpu"
+            return bool(torch.cuda.is_available())
         except Exception:
+            return False
+
+    @staticmethod
+    def cuda_name() -> str | None:
+        try:
+            import torch
+
+            if torch.cuda.is_available():
+                return torch.cuda.get_device_name(0)
+        except Exception:
+            pass
+        return None
+
+    def resolved_device(self) -> str:
+        """Torch device for the neural models: 'cuda' or 'cpu'."""
+        if self.device in ("cuda", "both"):
+            return "cuda" if self.cuda_available() else "cpu"
+        if self.device == "cpu":
             return "cpu"
+        return "cuda" if self.cuda_available() else "cpu"
+
+    def device_status(self) -> dict:
+        """Everything the Settings page needs to render the device picker."""
+        cuda = self.cuda_available()
+        wants_gpu = self.device in ("cuda", "both", "auto")
+        return {
+            "mode": self.device,
+            "cuda_available": cuda,
+            "cuda_name": self.cuda_name(),
+            "compute_device": self.resolved_device(),
+            "detector_device": "cpu",  # MediaPipe detection is CPU-only
+            "gpu_requested": self.device in ("cuda", "both"),
+            "using_gpu": self.resolved_device() == "cuda",
+            "fallback_warning": bool(wants_gpu and self.device != "auto"
+                                     and not cuda),
+        }
 
 
 # Global mutable config (owned by api.py).

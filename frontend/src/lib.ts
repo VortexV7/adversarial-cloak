@@ -30,6 +30,36 @@ export interface CloakConfig {
   use_mask: boolean;
   enabled: boolean;
   enroll_threshold: number;
+  device: string; // auto | cpu | cuda | both
+}
+
+export interface DeviceStatus {
+  mode: string;
+  cuda_available: boolean;
+  cuda_name: string | null;
+  compute_device: string;
+  detector_device: string;
+  gpu_requested: boolean;
+  using_gpu: boolean;
+  fallback_warning: boolean;
+}
+
+export interface CloakImageResult {
+  original: string;
+  image: string;
+  faces: number;
+  boxes: { x: number; y: number; w: number; h: number; track_id: number; score: number }[];
+  similarity_before: number;
+  similarity_after: number;
+  confidence_before: number;
+  confidence_after: number;
+  attack_success: boolean;
+  ssim: number;
+  psnr: number;
+  lpips: number;
+  latency_ms: number;
+  device: string;
+  device_mode: string;
 }
 
 export interface FrameMessage {

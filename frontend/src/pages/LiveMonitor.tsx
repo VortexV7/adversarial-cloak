@@ -4,7 +4,7 @@ import { Camera, CameraOff, Shield, ShieldOff } from "lucide-react";
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { useCloakSocket } from "../hooks/useCloakSocket";
 import { api, qualityBadge, type CloakConfig } from "../lib";
-import { Card, CardTitle, Gauge, Skeleton, Slider, Toast, Toggle } from "../components/ui";
+import { Card, CardTitle, Gauge, InfoButton, Skeleton, Slider, Toast, Toggle } from "../components/ui";
 
 export default function LiveMonitor({ cfg, setCfg, onToast }: {
   cfg: CloakConfig | null;
@@ -226,20 +226,27 @@ export default function LiveMonitor({ cfg, setCfg, onToast }: {
           </div>
           {cfg ? (
             <div className="mt-4 space-y-4">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Strength</p>
               <Slider label="Epsilon (perturbation budget)" value={cfg.epsilon} min={2 / 255} max={16 / 255} step={1 / 255}
-                onChange={(v) => updateCfg({ epsilon: v })} format={(v) => `${Math.round(v * 255)}/255`} />
-              <Slider label="PGD steps" value={cfg.steps} min={1} max={20} step={1} onChange={(v) => updateCfg({ steps: v })} />
+                onChange={(v) => updateCfg({ epsilon: v })} format={(v) => `${Math.round(v * 255)}/255`}
+                info="How strong the invisible change is. Higher hides you better, but adds faint visible noise." />
+              <Slider label="PGD steps" value={cfg.steps} min={1} max={20} step={1} onChange={(v) => updateCfg({ steps: v })}
+                info="How many times the cloak is refined per face. More steps = stronger cloak, but slower." />
+              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Speed</p>
               <Slider label="Update interval N (frames)" value={cfg.update_interval} min={1} max={15} step={1}
-                onChange={(v) => updateCfg({ update_interval: v })} format={(v) => `every ${v} frames`} />
+                onChange={(v) => updateCfg({ update_interval: v })} format={(v) => `every ${v} frames`}
+                info="How often the cloak is recalculated. Higher = faster video, slightly weaker protection when you move." />
               <label className="block text-sm font-medium">Surrogate model
+                <InfoButton label="Surrogate model" text="The AI model the cloak is tuned against. FaceNet is the standard choice; ArcFace is used to check the result." />
                 <select aria-label="Surrogate model" value={cfg.surrogate} onChange={(e) => updateCfg({ surrogate: e.target.value })}
                   className="mt-1 w-full rounded-card border border-slate-300 bg-transparent px-2 py-1.5 dark:border-slate-600">
                   <option value="facenet">FaceNet (differentiable)</option>
                   <option value="arcface">ArcFace (evaluation)</option>
                 </select>
               </label>
-              <div className="flex items-center justify-between text-sm"><span>EOT robustness (JPEG / resize / blur)</span><Toggle checked={cfg.use_eot} onChange={(v) => updateCfg({ use_eot: v })} label="EOT robustness" /></div>
-              <div className="flex items-center justify-between text-sm"><span>Facial-region mask (eyes / nose / mouth)</span><Toggle checked={cfg.use_mask} onChange={(v) => updateCfg({ use_mask: v })} label="Facial-region mask" /></div>
+              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Robustness</p>
+              <div className="flex items-center justify-between text-sm"><span>EOT robustness (JPEG / resize / blur)<InfoButton label="EOT robustness" text="Keeps the cloak working after the video is compressed, resized or blurred — like when a site re-encodes your video." /></span><Toggle checked={cfg.use_eot} onChange={(v) => updateCfg({ use_eot: v })} label="EOT robustness" /></div>
+              <div className="flex items-center justify-between text-sm"><span>Facial-region mask (eyes / nose / mouth)<InfoButton label="Facial-region mask" text="Focuses the change on the eyes, nose and mouth, so the rest of your face stays untouched." /></span><Toggle checked={cfg.use_mask} onChange={(v) => updateCfg({ use_mask: v })} label="Facial-region mask" /></div>
               <p className="text-xs text-slate-500 dark:text-slate-400">Higher epsilon and more steps hide identity better but add visible noise. EOT keeps the cloak working after JPEG compression and resizing.</p>
             </div>
           ) : <Skeleton className="mt-4 h-64 w-full" />}
